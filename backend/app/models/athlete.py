@@ -14,6 +14,7 @@ from app.database import Base
 if TYPE_CHECKING:
     from app.models.organization import Organization
     from app.models.social_account import SocialAccount
+    from app.models.content_item import ContentItem
 
 
 class RiskLevel(str, enum.Enum):
@@ -87,6 +88,9 @@ class Athlete(Base):
     )
     social_accounts: Mapped[list["SocialAccount"]] = relationship(
         "SocialAccount", back_populates="athlete", cascade="all, delete-orphan"
+    )
+    content_items: Mapped[list["ContentItem"]] = relationship(
+        "ContentItem", back_populates="athlete", cascade="all, delete-orphan"
     )
 
     @property
