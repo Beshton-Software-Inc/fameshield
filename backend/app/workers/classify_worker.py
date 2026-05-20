@@ -161,9 +161,44 @@ def capture_evidence(content_item_id: str, classification_id: str):
         content_item_id: UUID of content
         classification_id: UUID of classification
     """
-    # TODO: Implement evidence capture in Phase 2 Part 2
-    print(f"Evidence capture triggered for content {content_item_id}")
-    return {"status": "pending", "content_id": content_item_id}
+    async def _capture():
+        async with AsyncSessionLocal() as db:
+            try:
+                from app.services.evidence_service import EvidenceService
+
+                # Get content, classification, and athlete
+                content_item = await db.get(ContentItem, content_item_id)
+                classification = await db.get(Classification, classification_id)
+
+                if not content_item or not classification:
+                    print(f"Content or classification not found")
+                    return None
+
+                athlete = await db.get(Athlete, content_item.athlete_id)
+                if not athlete:
+                    print(f"Athlete not found")
+                    return None
+
+                # Capture evidence
+                service = EvidenceService()
+                evidence_records = await service.capture_evidence(
+                    content_item, classification, athlete, db
+                )
+
+                print(f"Captured {len(evidence_records)} evidence items for content {content_item_id}")
+
+                return {
+                    "status": "completed",
+                    "content_id": content_item_id,
+                    "evidence_count": len(evidence_records),
+                    "evidence_ids": [str(ev.id) for ev in evidence_records]
+                }
+
+            except Exception as e:
+                print(f"Error capturing evidence for {content_item_id}: {e}")
+                raise
+
+    return asyncio.run(_capture())
 
 
 @celery_app.task(name="create_escalation")

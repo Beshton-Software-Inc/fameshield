@@ -10,7 +10,7 @@ import logging
 
 from app.config import settings
 from app.database import init_db, close_db
-from app.api import auth, athletes
+from app.api import auth, athletes, content, classifications
 
 
 # Configure logging
@@ -113,6 +113,8 @@ async def root():
 # Register API routers
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(athletes.router, prefix="/api/v1")
+app.include_router(content.router, prefix="/api/v1")
+app.include_router(classifications.router, prefix="/api/v1")
 
 
 if __name__ == "__main__":
