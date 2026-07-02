@@ -50,7 +50,10 @@ class Evidence(Base):
     )
 
     # Evidence details
-    evidence_type: Mapped[EvidenceType] = mapped_column(Enum(EvidenceType), nullable=False)
+    evidence_type: Mapped[EvidenceType] = mapped_column(
+        Enum(EvidenceType, values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
+    )
 
     # Storage
     storage_path: Mapped[str] = mapped_column(String(1000), nullable=False)  # S3 key
@@ -62,8 +65,9 @@ class Evidence(Base):
     # Integrity
     checksum: Mapped[str] = mapped_column(String(64), nullable=False)  # SHA-256
 
-    # Metadata about capture
-    metadata: Mapped[dict] = mapped_column(
+    # Metadata about capture ("metadata" is reserved by SQLAlchemy Declarative)
+    capture_metadata: Mapped[dict] = mapped_column(
+        "metadata",
         JSON,
         default={
             "capture_timestamp": None,

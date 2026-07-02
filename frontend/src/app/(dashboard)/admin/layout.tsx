@@ -1,8 +1,9 @@
 'use client';
 
-import { ReactNode } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import {
   LayoutDashboard,
   Users,
@@ -11,8 +12,10 @@ import {
   Flag,
   BarChart3,
   Settings,
-  Shield
+  Shield,
+  LogOut,
 } from 'lucide-react';
+import { apiClient } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 
 const navigation = [
@@ -27,6 +30,44 @@ const navigation = [
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [ready, setReady] = useState(false);
+
+  // Public admin routes — render their page directly with no sidebar wrapper.
+  const isPublicRoute =
+    pathname === '/admin/login' || pathname === '/admin/forgot';
+
+  useEffect(() => {
+    if (isPublicRoute) {
+      setReady(true);
+      return;
+    }
+    if (typeof window === 'undefined') return;
+    if (!apiClient.getStaffToken()) {
+      router.replace(`/admin/login?next=${encodeURIComponent(pathname || '/admin')}`);
+      return;
+    }
+    setReady(true);
+  }, [isPublicRoute, pathname, router]);
+
+  const meQuery = useQuery({
+    queryKey: ['staff-me'],
+    queryFn: () => apiClient.getCurrentUser(),
+    enabled: ready && !isPublicRoute,
+    retry: false,
+  });
+
+  useEffect(() => {
+    if (meQuery.error) {
+      apiClient.clearStaffTokens();
+      router.replace(`/admin/login?next=${encodeURIComponent(pathname || '/admin')}`);
+    }
+  }, [meQuery.error, pathname, router]);
+
+  if (isPublicRoute) return <>{children}</>;
+  if (!ready) return null;
+
+  const me = meQuery.data;
 
   return (
     <div className="flex h-screen bg-gray-100">
@@ -64,15 +105,29 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
         {/* User Menu */}
         <div className="p-4 border-t border-gray-200">
-          <div className="flex items-center">
+          <div className="flex items-center mb-3">
             <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-              <span className="text-sm font-medium text-blue-700">AD</span>
+              <span className="text-sm font-medium text-blue-700">
+                {(me?.first_name?.[0] || '?') + (me?.last_name?.[0] || '')}
+              </span>
             </div>
-            <div className="ml-3">
-              <p className="text-sm font-medium text-gray-700">Admin User</p>
-              <p className="text-xs text-gray-500">admin@fameshield.com</p>
+            <div className="ml-3 min-w-0">
+              <p className="text-sm font-medium text-gray-700 truncate">
+                {me ? `${me.first_name} ${me.last_name}` : 'Loading…'}
+              </p>
+              <p className="text-xs text-gray-500 truncate">{me?.email || ''}</p>
             </div>
           </div>
+          <button
+            onClick={async () => {
+              await apiClient.logout();
+              router.replace('/admin/login');
+            }}
+            className="w-full flex items-center justify-center gap-2 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-md"
+          >
+            <LogOut className="w-4 h-4" />
+            Sign out
+          </button>
         </div>
       </div>
 

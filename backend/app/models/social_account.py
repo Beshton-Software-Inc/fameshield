@@ -43,7 +43,10 @@ class SocialAccount(Base):
         UUID(as_uuid=True), ForeignKey("athletes.id", ondelete="CASCADE")
     )
 
-    platform: Mapped[Platform] = mapped_column(Enum(Platform), nullable=False)
+    platform: Mapped[Platform] = mapped_column(
+        Enum(Platform, values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
+    )
     platform_user_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     username: Mapped[str] = mapped_column(String(255), nullable=False)
     display_name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -60,7 +63,8 @@ class SocialAccount(Base):
     )
 
     monitoring_status: Mapped[MonitoringStatus] = mapped_column(
-        Enum(MonitoringStatus), default=MonitoringStatus.ACTIVE
+        Enum(MonitoringStatus, values_callable=lambda x: [e.value for e in x]),
+        default=MonitoringStatus.ACTIVE,
     )
 
     last_monitored_at: Mapped[Optional[datetime]] = mapped_column(

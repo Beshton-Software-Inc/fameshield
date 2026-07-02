@@ -50,7 +50,10 @@ class ContentItem(Base):
     )
 
     platform: Mapped[str] = mapped_column(String(50), nullable=False)
-    content_type: Mapped[ContentType] = mapped_column(Enum(ContentType), nullable=False)
+    content_type: Mapped[ContentType] = mapped_column(
+        Enum(ContentType, values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
+    )
 
     # Platform-specific identifiers
     platform_content_id: Mapped[str] = mapped_column(String(255), nullable=False)

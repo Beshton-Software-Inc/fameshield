@@ -47,7 +47,7 @@ class AthleteUpdate(BaseModel):
 class AthleteResponse(BaseModel):
     """Schema for athlete response."""
     id: UUID
-    organization_id: UUID
+    organization_id: Optional[UUID] = None
     first_name: str
     last_name: str
     full_name: str

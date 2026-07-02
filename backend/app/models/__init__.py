@@ -8,6 +8,14 @@ from app.models.social_account import SocialAccount
 from app.models.content_item import ContentItem
 from app.models.classification import Classification
 from app.models.evidence import Evidence
+from app.models.password_reset import PasswordResetToken
+from app.models.subscription import (
+    Product,
+    AthleteSubscription,
+    PaymentMethod,
+    BillingInterval,
+    SubscriptionStatus,
+)
 
 __all__ = [
     "Organization",
@@ -17,4 +25,10 @@ __all__ = [
     "ContentItem",
     "Classification",
     "Evidence",
+    "PasswordResetToken",
+    "Product",
+    "AthleteSubscription",
+    "PaymentMethod",
+    "BillingInterval",
+    "SubscriptionStatus",
 ]
