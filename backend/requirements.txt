@@ -18,11 +18,13 @@ celery[redis]==5.3.6
 # Authentication
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+bcrypt<4
 python-multipart==0.0.6
 
 # AI/ML
 anthropic==0.18.1
 openai==1.12.0
+stripe==8.5.0
 
 # AWS Services
 boto3==1.34.34

@@ -66,7 +66,8 @@ class Classification(Base):
 
     # Categories
     primary_category: Mapped[ClassificationCategory] = mapped_column(
-        Enum(ClassificationCategory), nullable=False
+        Enum(ClassificationCategory, values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
     )
     secondary_categories: Mapped[list[str]] = mapped_column(
         ARRAY(String), default=[]
@@ -106,7 +107,8 @@ class Classification(Base):
 
     # Status
     status: Mapped[ClassificationStatus] = mapped_column(
-        Enum(ClassificationStatus), default=ClassificationStatus.PENDING
+        Enum(ClassificationStatus, values_callable=lambda x: [e.value for e in x]),
+        default=ClassificationStatus.PENDING,
     )
 
     # Recommended action

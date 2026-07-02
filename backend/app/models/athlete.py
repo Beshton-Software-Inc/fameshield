@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from app.models.organization import Organization
     from app.models.social_account import SocialAccount
     from app.models.content_item import ContentItem
+    from app.models.subscription import AthleteSubscription, PaymentMethod
 
 
 class RiskLevel(str, enum.Enum):
@@ -40,21 +41,34 @@ class Athlete(Base):
     id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid4
     )
-    organization_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="CASCADE")
+    organization_id: Mapped[Optional[UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="SET NULL"), nullable=True
     )
 
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    hashed_password: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    phone: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
     date_of_birth: Mapped[date] = mapped_column(Date, nullable=False)
 
     sport: Mapped[str] = mapped_column(String(100), nullable=False)
     bio: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
     profile_image_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
+    address_line1: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    address_line2: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    city: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    state: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    postal_code: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    country: Mapped[Optional[str]] = mapped_column(String(2), nullable=True)
+
+    stripe_customer_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
+    last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
     risk_level: Mapped[RiskLevel] = mapped_column(
-        Enum(RiskLevel), default=RiskLevel.LOW
+        Enum(RiskLevel, values_callable=lambda x: [e.value for e in x]),
+        default=RiskLevel.LOW,
     )
 
     monitoring_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -83,7 +97,7 @@ class Athlete(Base):
     )
 
     # Relationships
-    organization: Mapped["Organization"] = relationship(
+    organization: Mapped[Optional["Organization"]] = relationship(
         "Organization", back_populates="athletes"
     )
     social_accounts: Mapped[list["SocialAccount"]] = relationship(
@@ -91,6 +105,12 @@ class Athlete(Base):
     )
     content_items: Mapped[list["ContentItem"]] = relationship(
         "ContentItem", back_populates="athlete", cascade="all, delete-orphan"
+    )
+    subscriptions: Mapped[list["AthleteSubscription"]] = relationship(
+        "AthleteSubscription", back_populates="athlete", cascade="all, delete-orphan"
+    )
+    payment_methods: Mapped[list["PaymentMethod"]] = relationship(
+        "PaymentMethod", back_populates="athlete", cascade="all, delete-orphan"
     )
 
     @property

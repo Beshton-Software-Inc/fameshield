@@ -153,7 +153,7 @@ class EvidenceService:
                         file_size=len(screenshot_bytes),
                         mime_type='image/png',
                         checksum=checksum,
-                        metadata={
+                        capture_metadata={
                             'capture_timestamp': datetime.utcnow().isoformat(),
                             'capture_method': 'playwright_chromium',
                             'browser_info': {
@@ -242,7 +242,7 @@ class EvidenceService:
                         file_size=len(html_bytes),
                         mime_type='text/html',
                         checksum=checksum,
-                        metadata={
+                        capture_metadata={
                             'capture_timestamp': datetime.utcnow().isoformat(),
                             'capture_method': 'playwright_chromium',
                             'url': content_item.content_url,
@@ -363,7 +363,7 @@ class EvidenceService:
                 file_size=len(metadata_bytes),
                 mime_type='application/json',
                 checksum=checksum,
-                metadata={
+                capture_metadata={
                     'capture_timestamp': datetime.utcnow().isoformat(),
                     'version': '1.0'
                 }
@@ -444,7 +444,7 @@ class EvidenceService:
                             file_size=len(media_bytes),
                             mime_type=content_type,
                             checksum=checksum,
-                            metadata={
+                            capture_metadata={
                                 'capture_timestamp': datetime.utcnow().isoformat(),
                                 'source_url': media_url,
                                 'index': idx

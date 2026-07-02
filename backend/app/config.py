@@ -66,6 +66,11 @@ class Settings(BaseSettings):
     twilio_auth_token: Optional[str] = None
     twilio_from_phone: Optional[str] = None
 
+    # Stripe
+    stripe_secret_key: Optional[str] = None
+    stripe_publishable_key: Optional[str] = None
+    stripe_webhook_secret: Optional[str] = None
+
     # Rate Limiting
     rate_limit_per_minute: int = 60
     rate_limit_per_hour: int = 1000

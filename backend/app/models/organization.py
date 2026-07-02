@@ -42,10 +42,12 @@ class Organization(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     type: Mapped[OrganizationType] = mapped_column(
-        Enum(OrganizationType), nullable=False
+        Enum(OrganizationType, values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
     )
     tier: Mapped[OrganizationTier] = mapped_column(
-        Enum(OrganizationTier), default=OrganizationTier.STARTER
+        Enum(OrganizationTier, values_callable=lambda x: [e.value for e in x]),
+        default=OrganizationTier.STARTER,
     )
 
     # JSON settings for flexibility

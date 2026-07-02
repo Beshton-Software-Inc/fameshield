@@ -40,7 +40,10 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
 
-    role: Mapped[UserRole] = mapped_column(Enum(UserRole), nullable=False)
+    role: Mapped[UserRole] = mapped_column(
+        Enum(UserRole, values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
+    )
     permissions: Mapped[list[str]] = mapped_column(ARRAY(String), default=[])
 
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)

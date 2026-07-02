@@ -10,7 +10,15 @@ import logging
 
 from app.config import settings
 from app.database import init_db, close_db
-from app.api import auth, athletes, content, classifications
+from app.api import (
+    athlete_auth,
+    athlete_portal,
+    athletes,
+    auth,
+    classifications,
+    content,
+    subscriptions,
+)
 
 
 # Configure logging
@@ -115,6 +123,9 @@ app.include_router(auth.router, prefix="/api/v1")
 app.include_router(athletes.router, prefix="/api/v1")
 app.include_router(content.router, prefix="/api/v1")
 app.include_router(classifications.router, prefix="/api/v1")
+app.include_router(athlete_auth.router, prefix="/api/v1")
+app.include_router(athlete_portal.router, prefix="/api/v1")
+app.include_router(subscriptions.router, prefix="/api/v1")
 
 
 if __name__ == "__main__":
