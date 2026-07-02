@@ -5,88 +5,94 @@ import axios, { AxiosInstance, AxiosError } from 'axios';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
+type Audience = 'staff' | 'athlete';
+
+// URL prefixes that require a staff (organization user) token. Anything else
+// either takes the athlete token or is public.
+const STAFF_URL_PREFIXES = [
+  '/auth/',
+  '/athletes',
+  '/content',
+  '/classifications',
+];
+
+function audienceForUrl(url: string | undefined): Audience {
+  if (!url) return 'athlete';
+  return STAFF_URL_PREFIXES.some((p) => url.startsWith(p)) ? 'staff' : 'athlete';
+}
+
+function tokenKey(audience: Audience, kind: 'access' | 'refresh'): string {
+  return `${audience}${kind === 'access' ? 'AccessToken' : 'RefreshToken'}`;
+}
+
 class ApiClient {
   private client: AxiosInstance;
-  private accessToken: string | null = null;
 
   constructor() {
     this.client = axios.create({
       baseURL: API_BASE_URL,
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
     });
 
-    // Request interceptor to add auth token
     this.client.interceptors.request.use(
       (config) => {
-        if (this.accessToken) {
-          config.headers.Authorization = `Bearer ${this.accessToken}`;
+        const audience = audienceForUrl(config.url);
+        const token = this.getTokenFor(audience);
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
         }
         return config;
       },
       (error) => Promise.reject(error)
     );
 
-    // Response interceptor for error handling
     this.client.interceptors.response.use(
       (response) => response,
-      async (error: AxiosError) => {
-        if (error.response?.status === 401) {
-          // Token expired, try to refresh
-          const refreshed = await this.refreshToken();
-          if (refreshed && error.config) {
-            return this.client.request(error.config);
-          }
-        }
-        return Promise.reject(error);
-      }
+      (error: AxiosError) => Promise.reject(error)
     );
   }
 
+  private setTokens(audience: Audience, access: string, refresh: string) {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem(tokenKey(audience, 'access'), access);
+    localStorage.setItem(tokenKey(audience, 'refresh'), refresh);
+  }
+
+  private getTokenFor(audience: Audience): string | null {
+    if (typeof window === 'undefined') return null;
+    return localStorage.getItem(tokenKey(audience, 'access'));
+  }
+
+  private clearAudience(audience: Audience) {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem(tokenKey(audience, 'access'));
+    localStorage.removeItem(tokenKey(audience, 'refresh'));
+  }
+
+  // Back-compat shim used by the athlete flow; treat any bare setAccessToken as athlete.
   setAccessToken(token: string) {
-    this.accessToken = token;
     if (typeof window !== 'undefined') {
-      localStorage.setItem('accessToken', token);
+      localStorage.setItem(tokenKey('athlete', 'access'), token);
     }
   }
 
-  getAccessToken(): string | null {
-    if (!this.accessToken && typeof window !== 'undefined') {
-      this.accessToken = localStorage.getItem('accessToken');
-    }
-    return this.accessToken;
+  getStaffToken() {
+    return this.getTokenFor('staff');
+  }
+
+  getAthleteToken() {
+    return this.getTokenFor('athlete');
   }
 
   clearTokens() {
-    this.accessToken = null;
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
-    }
+    this.clearAudience('athlete');
   }
 
-  async refreshToken(): Promise<boolean> {
-    try {
-      if (typeof window === 'undefined') return false;
-
-      const refreshToken = localStorage.getItem('refreshToken');
-      if (!refreshToken) return false;
-
-      const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
-        refresh_token: refreshToken,
-      });
-
-      this.setAccessToken(response.data.access_token);
-      localStorage.setItem('refreshToken', response.data.refresh_token);
-      return true;
-    } catch (error) {
-      this.clearTokens();
-      return false;
-    }
+  clearStaffTokens() {
+    this.clearAudience('staff');
   }
 
-  // Auth endpoints
+  // Staff auth
   async login(email: string, password: string) {
     const formData = new URLSearchParams();
     formData.append('username', email);
@@ -96,11 +102,7 @@ class ApiClient {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     });
 
-    this.setAccessToken(response.data.access_token);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('refreshToken', response.data.refresh_token);
-    }
-
+    this.setTokens('staff', response.data.access_token, response.data.refresh_token);
     return response.data;
   }
 
@@ -121,8 +123,26 @@ class ApiClient {
   }
 
   async logout() {
-    await this.client.post('/auth/logout');
-    this.clearTokens();
+    try {
+      await this.client.post('/auth/logout');
+    } catch {
+      // Ignore — clearing tokens locally is the useful part.
+    }
+    this.clearStaffTokens();
+  }
+
+  async staffForgotPassword(email: string) {
+    const response = await this.client.post('/auth/forgot-password', { email });
+    return response.data;
+  }
+
+  async staffResetPassword(token: string, new_password: string) {
+    const response = await this.client.post('/auth/reset-password', {
+      token,
+      new_password,
+    });
+    this.setTokens('staff', response.data.access_token, response.data.refresh_token);
+    return response.data;
   }
 
   // Athlete endpoints
@@ -218,9 +238,25 @@ class ApiClient {
     phone?: string;
   }) {
     const response = await this.client.post('/athlete-auth/register', data);
-    this.setAccessToken(response.data.access_token);
+    this.setTokens('athlete', response.data.access_token, response.data.refresh_token);
     if (typeof window !== 'undefined') {
-      localStorage.setItem('refreshToken', response.data.refresh_token);
+      localStorage.setItem('athleteId', response.data.athlete_id);
+    }
+    return response.data;
+  }
+
+  async athleteForgotPassword(email: string) {
+    const response = await this.client.post('/athlete-auth/forgot-password', { email });
+    return response.data;
+  }
+
+  async athleteResetPassword(token: string, new_password: string) {
+    const response = await this.client.post('/athlete-auth/reset-password', {
+      token,
+      new_password,
+    });
+    this.setTokens('athlete', response.data.access_token, response.data.refresh_token);
+    if (typeof window !== 'undefined') {
       localStorage.setItem('athleteId', response.data.athlete_id);
     }
     return response.data;
@@ -233,9 +269,8 @@ class ApiClient {
     const response = await this.client.post('/athlete-auth/login', formData, {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     });
-    this.setAccessToken(response.data.access_token);
+    this.setTokens('athlete', response.data.access_token, response.data.refresh_token);
     if (typeof window !== 'undefined') {
-      localStorage.setItem('refreshToken', response.data.refresh_token);
       localStorage.setItem('athleteId', response.data.athlete_id);
     }
     return response.data;

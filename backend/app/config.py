@@ -57,9 +57,19 @@ class Settings(BaseSettings):
     jwt_refresh_token_expire_days: int = 7
 
     # Email
-    email_provider: str = "sendgrid"
+    email_provider: str = "smtp"  # 'smtp' | 'sendgrid'
     sendgrid_api_key: Optional[str] = None
     from_email: str = "noreply@fameshield.com"
+
+    # Gmail / SMTP
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_user: Optional[str] = None
+    smtp_password: Optional[str] = None
+    smtp_use_tls: bool = True
+
+    # Frontend origin used when composing password-reset links.
+    frontend_base_url: str = "http://localhost:3000"
 
     # SMS
     twilio_account_sid: Optional[str] = None

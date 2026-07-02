@@ -33,8 +33,7 @@ export default function PortalLayout({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const token = localStorage.getItem('accessToken');
-    if (!token) {
+    if (!apiClient.getAthleteToken()) {
       router.replace('/login');
       return;
     }

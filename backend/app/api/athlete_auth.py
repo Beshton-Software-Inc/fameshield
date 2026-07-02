@@ -13,7 +13,32 @@ from uuid import UUID
 from app.config import settings
 from app.database import get_db
 from app.models.athlete import Athlete
+from app.models.organization import Organization, OrganizationTier, OrganizationType
 from app.services.auth_service import AuthService
+from app.services.password_reset_service import (
+    consume_token,
+    create_reset_token,
+    send_reset_email,
+)
+
+SELF_SERVE_ORG_NAME = "FameShield Self-Serve"
+
+
+async def _get_or_create_self_serve_org(db: AsyncSession) -> Organization:
+    result = await db.execute(
+        select(Organization).where(Organization.name == SELF_SERVE_ORG_NAME)
+    )
+    org = result.scalar_one_or_none()
+    if org:
+        return org
+    org = Organization(
+        name=SELF_SERVE_ORG_NAME,
+        type=OrganizationType.INDIVIDUAL,
+        tier=OrganizationTier.STARTER,
+    )
+    db.add(org)
+    await db.flush()
+    return org
 
 router = APIRouter(prefix="/athlete-auth", tags=["athlete-auth"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/athlete-auth/login", auto_error=False)
@@ -40,6 +65,19 @@ class AthleteLoginResponse(BaseModel):
 
 class AthleteRefresh(BaseModel):
     refresh_token: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+
+class AcceptedResponse(BaseModel):
+    status: str = "accepted"
 
 
 def _make_tokens(athlete: Athlete) -> AthleteLoginResponse:
@@ -103,7 +141,9 @@ async def register_athlete(payload: AthleteRegister, db: AsyncSession = Depends(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered"
         )
 
+    org = await _get_or_create_self_serve_org(db)
     athlete = Athlete(
+        organization_id=org.id,
         first_name=payload.first_name,
         last_name=payload.last_name,
         email=payload.email,
@@ -133,6 +173,51 @@ async def login_athlete(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password"
         )
+    athlete.last_login_at = datetime.utcnow()
+    await db.commit()
+    return _make_tokens(athlete)
+
+
+@router.post(
+    "/forgot-password",
+    response_model=AcceptedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def athlete_forgot_password(
+    payload: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)
+):
+    """Accept the request unconditionally to avoid leaking whether an email exists."""
+    result = await db.execute(select(Athlete).where(Athlete.email == payload.email))
+    athlete = result.scalar_one_or_none()
+    if athlete:
+        raw, _ = await create_reset_token(db, athlete.id, "athlete")
+        await db.commit()
+        send_reset_email(athlete.email, athlete.first_name, raw, "athlete")
+    return AcceptedResponse()
+
+
+@router.post("/reset-password", response_model=AthleteLoginResponse)
+async def athlete_reset_password(
+    payload: ResetPasswordRequest, db: AsyncSession = Depends(get_db)
+):
+    if len(payload.new_password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 8 characters",
+        )
+    subject_id = await consume_token(db, payload.token, "athlete")
+    if not subject_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Reset link is invalid or expired",
+        )
+    result = await db.execute(select(Athlete).where(Athlete.id == subject_id))
+    athlete = result.scalar_one_or_none()
+    if not athlete:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Account no longer exists"
+        )
+    athlete.hashed_password = AuthService.hash_password(payload.new_password)
     athlete.last_login_at = datetime.utcnow()
     await db.commit()
     return _make_tokens(athlete)

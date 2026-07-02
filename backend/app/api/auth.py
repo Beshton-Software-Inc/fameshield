@@ -14,6 +14,11 @@ from app.database import get_db
 from app.models.user import User, UserRole
 from app.models.organization import Organization
 from app.services.auth_service import AuthService
+from app.services.password_reset_service import (
+    consume_token,
+    create_reset_token,
+    send_reset_email,
+)
 
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
@@ -31,6 +36,19 @@ class Token(BaseModel):
 class TokenRefresh(BaseModel):
     """Token refresh request schema."""
     refresh_token: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+
+class AcceptedResponse(BaseModel):
+    status: str = "accepted"
 
 
 class UserRegister(BaseModel):
@@ -109,14 +127,24 @@ async def register(
             detail="Email already registered"
         )
 
-    # Create organization
-    organization = Organization(
-        name=user_data.organization_name,
-        type="individual",  # Default type
-        tier="starter"
+    # Join an existing org by name when there's exactly one match; otherwise
+    # create a new one. This treats "FameShield Self-Serve" (and any other
+    # org an admin has already set up) as reusable, so staff signups don't
+    # spawn duplicate orgs with the same name.
+    result = await db.execute(
+        select(Organization).where(Organization.name == user_data.organization_name)
     )
-    db.add(organization)
-    await db.flush()  # Get the organization ID
+    existing_orgs = list(result.scalars().all())
+    if len(existing_orgs) == 1:
+        organization = existing_orgs[0]
+    else:
+        organization = Organization(
+            name=user_data.organization_name,
+            type="individual",
+            tier="starter",
+        )
+        db.add(organization)
+        await db.flush()
 
     # Create admin user
     hashed_password = AuthService.hash_password(user_data.password)
@@ -226,3 +254,56 @@ async def logout(current_user: User = Depends(get_current_user)):
     Logout (client should discard tokens).
     """
     return {"message": "Successfully logged out"}
+
+
+@router.post(
+    "/forgot-password",
+    response_model=AcceptedResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def forgot_password(
+    payload: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)
+):
+    """Accept the request unconditionally to avoid leaking whether an email exists."""
+    result = await db.execute(select(User).where(User.email == payload.email))
+    user = result.scalar_one_or_none()
+    if user:
+        raw, _ = await create_reset_token(db, user.id, "staff")
+        await db.commit()
+        send_reset_email(user.email, user.first_name, raw, "staff")
+    return AcceptedResponse()
+
+
+@router.post("/reset-password", response_model=Token)
+async def reset_password(
+    payload: ResetPasswordRequest, db: AsyncSession = Depends(get_db)
+):
+    if len(payload.new_password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 8 characters",
+        )
+    subject_id = await consume_token(db, payload.token, "staff")
+    if not subject_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Reset link is invalid or expired",
+        )
+    result = await db.execute(select(User).where(User.id == subject_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Account no longer exists"
+        )
+    user.hashed_password = AuthService.hash_password(payload.new_password)
+    user.last_login_at = datetime.utcnow()
+    await db.commit()
+    access_token = AuthService.create_access_token(
+        data={"sub": str(user.id), "email": user.email, "role": user.role.value}
+    )
+    refresh_token_val = AuthService.create_refresh_token(data={"sub": str(user.id)})
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token_val,
+        "token_type": "bearer",
+    }
